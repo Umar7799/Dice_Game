@@ -2,15 +2,11 @@ export class ProbabilityCalculator {
     static calculateProbabilities(dice) {
         const numSimulations = 100000;
         const numDice = dice.length;
-        let results = Array(numDice).fill(null).map(() => Array(numDice).fill(null));
+        let results = Array.from({ length: numDice }, () => Array(numDice).fill(null));
 
         for (let i = 0; i < numDice; i++) {
             for (let j = 0; j < numDice; j++) {
-                if (i === j) {
-                    results[i][j] = '—';
-                } else {
-                    results[i][j] = ProbabilityCalculator.simulate(dice[i], dice[j], numSimulations);
-                }
+                results[i][j] = i === j ? "—" : ProbabilityCalculator.simulate(dice[i], dice[j], numSimulations);
             }
         }
 
@@ -21,11 +17,11 @@ export class ProbabilityCalculator {
         let die1Wins = 0;
 
         for (let i = 0; i < numSimulations; i++) {
-            let roll1 = die1[Math.floor(Math.random() * die1.length)];
-            let roll2 = die2[Math.floor(Math.random() * die2.length)];
-            if (roll1 > roll2) die1Wins++;
+            if (die1[Math.floor(Math.random() * 6)] > die2[Math.floor(Math.random() * 6)]) {
+                die1Wins++;
+            }
         }
 
-        return ((die1Wins / numSimulations) * 100).toFixed(1) + "%";
+        return `${((die1Wins / numSimulations) * 100).toFixed(1)}%`;
     }
 }

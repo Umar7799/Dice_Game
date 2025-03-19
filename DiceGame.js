@@ -1,5 +1,4 @@
 import { FairRandomGenerator } from "./FairRandomGenerator.js";
-import chalk from "chalk";
 
 export class DiceGame {
     constructor(dice, rl) {
@@ -10,78 +9,118 @@ export class DiceGame {
         this.scores = { user: 0, computer: 0 };
     }
 
+    exitGame() {
+        console.log("Exiting game... See you next time!");
+        this.rl.close();
+        process.exit(0);
+    }
+
     selectDice(callback) {
-        console.log(chalk.magenta("\n🎲 Let's decide who picks the die first!"));
-        const coinFlip = Math.floor(Math.random() * 2);
+        console.log("\nCoin flip to decide who picks the die first.");
+        
+        const secretKey = FairRandomGenerator.generateSecretKey();
+        const coinFlip = Math.floor(Math.random() * 2);  
+        const hmac = FairRandomGenerator.generateHMAC(secretKey, coinFlip.toString());
 
-        if (coinFlip === 0) {
-            console.log(chalk.green("🪙 Coin flip result: **User picks first!**"));
+        console.log(`HMAC of Coin Flip: ${hmac}`);
+        this.rl.question("Predict coin flip result (0 or 1, or type 'x' to exit): ", (input) => {
+            if (input.toLowerCase() === 'x') return this.exitGame();
+            
+            const userPrediction = parseInt(input, 10);
+            if (isNaN(userPrediction) || (userPrediction !== 0 && userPrediction !== 1)) {
+                console.log("Invalid input. Please enter 0, 1, or 'x' to exit.");
+                return this.selectDice(callback);
+            }
 
-            this.dice.forEach((die, index) => console.log(`[${index + 1}] Die: ${chalk.cyan(die.join(", "))}`));
+            console.log(`Secret Key: ${secretKey}`);
+            console.log(`Coin flip result: ${coinFlip}`);
+            console.log(`HMAC Verification: ${FairRandomGenerator.verifyHMAC(secretKey, coinFlip.toString(), hmac) ? "Valid" : "Invalid"}`);
 
-            this.rl.question(chalk.cyan("\nPick a die (1, 2, or 3): "), (choice) => {
-                const index = parseInt(choice, 10) - 1;
-                if (index >= 0 && index < this.dice.length) {
-                    this.userDie = this.dice[index];
-                    this.computerDie = this.dice.find(d => d !== this.userDie);
-                } else {
-                    console.log(chalk.red("❌ Invalid choice! Defaulting to first die."));
-                    this.userDie = this.dice[0];
-                    this.computerDie = this.dice.find(d => d !== this.userDie);
-                }
-                console.log(chalk.yellow("\n✅ Final Dice Selection:"));
-                console.log(chalk.green("👤 User's Die:"), chalk.cyan(this.userDie));
-                console.log(chalk.red("🤖 Computer's Die:"), chalk.cyan(this.computerDie));
-                callback();
-            });
-        } else {
-            console.log(chalk.red("🪙 Coin flip result: **Computer picks first!**"));
+            if (userPrediction === coinFlip) {
+                console.log("You guessed right! You pick first.");
+                this.askUserForDie(callback);
+            } else {
+                console.log("Computer picks first.");
+                this.computerSelectsDie(callback);
+            }
+        });
+    }
 
-            const computerChoice = Math.floor(Math.random() * this.dice.length);
-            this.computerDie = this.dice[computerChoice];
-            this.userDie = this.dice.find(d => d !== this.computerDie);
+    askUserForDie(callback) {
+        this.dice.forEach((die, index) => console.log(`[${index + 1}] Die: ${die.join(", ")}`));
 
-            console.log(`🤖 Computer picked: ${chalk.red(this.computerDie.join(", "))}`);
-            console.log(chalk.yellow("\n✅ Final Dice Selection:"));
-            console.log(chalk.green("👤 User's Die:"), chalk.cyan(this.userDie));
-            console.log(chalk.red("🤖 Computer's Die:"), chalk.cyan(this.computerDie));
+        this.rl.question("Pick a die (1, 2, or more, or type 'x' to exit): ", (choice) => {
+            if (choice.toLowerCase() === 'x') return this.exitGame();
+
+            const index = parseInt(choice, 10) - 1;
+            if (index >= 0 && index < this.dice.length) {
+                this.userDie = this.dice[index];
+
+                // Exclude the chosen die, let the computer pick from the remaining ones
+                const remainingDice = this.dice.filter((_, i) => i !== index);
+                this.computerDie = remainingDice[Math.floor(Math.random() * remainingDice.length)];
+
+                console.log(`You picked: ${this.userDie.join(", ")}`);
+                console.log(`Computer picked: ${this.computerDie.join(", ")}`);
+            } else {
+                console.log("Invalid choice! Defaulting to first die.");
+                this.userDie = this.dice[0];
+
+                const remainingDice = this.dice.slice(1);
+                this.computerDie = remainingDice[Math.floor(Math.random() * remainingDice.length)];
+
+                console.log(`You got: ${this.userDie.join(", ")}`);
+                console.log(`Computer picked: ${this.computerDie.join(", ")}`);
+            }
+
+            console.log("Dice selection completed.");
             callback();
-        }
+        });
+    }
+
+    computerSelectsDie(callback) {
+        const computerChoice = Math.floor(Math.random() * this.dice.length);
+        this.computerDie = this.dice[computerChoice];
+
+        console.log(`Computer picked: ${this.computerDie.join(", ")}`);
+
+        // Ensure user gets a different choice
+        this.askUserForDie(callback);
     }
 
     playRound(roundNumber, callback) {
-        console.log(chalk.blue(`\n🔹 Round ${roundNumber} Start!`));
+        console.log(`\nRound ${roundNumber}`);
 
         const secretKey = FairRandomGenerator.generateSecretKey();
         const computerValue = this.computerDie[Math.floor(Math.random() * 6)];
         const hmac = FairRandomGenerator.generateHMAC(secretKey, computerValue.toString());
 
-        console.log(chalk.gray(`🔐 Computer's HMAC: ${hmac}`));
+        console.log(`HMAC: ${hmac}`);
 
-        this.rl.question(chalk.cyan("\nEnter your number (0-5): "), (input) => {
+        this.rl.question("Enter your number index (0-5, or type 'x' to exit): ", (input) => {
+            if (input.toLowerCase() === 'x') return this.exitGame();
+
             const userIndex = parseInt(input, 10);
             if (isNaN(userIndex) || userIndex < 0 || userIndex >= this.userDie.length) {
-                console.log(chalk.red("❌ Invalid choice! Try again."));
+                console.log("Invalid choice! Try again.");
                 return this.playRound(roundNumber, callback);
             }
 
             const userValue = this.userDie[userIndex];
 
-            console.log(chalk.yellow("\n🔓 Revealing Values..."));
-            console.log(`🤖 Computer's Value: ${chalk.red(computerValue)}`);
-            console.log(`🔑 Secret Key: ${chalk.gray(secretKey)}`);
-
-            const isValidHMAC = FairRandomGenerator.verifyHMAC(secretKey, computerValue.toString(), hmac);
-            console.log(`✅ Verify HMAC: ${isValidHMAC ? chalk.green("Valid ✅") : chalk.red("Invalid ❌")}`);
+            console.log("Revealing values...");
+            console.log(`Computer's Value: ${computerValue}`);
+            console.log(`Secret Key: ${secretKey}`);
+            console.log(`HMAC Verification: ${FairRandomGenerator.verifyHMAC(secretKey, computerValue.toString(), hmac) ? "Valid" : "Invalid"}`);
 
             if (userValue > computerValue) {
-                console.log(chalk.green("🎉 You win this round!"));
+                console.log("You win this round.");
                 this.scores.user++;
             } else if (userValue < computerValue) {
-                console.log(chalk.red("💻 Computer wins this round!"));
+                console.log("Computer wins this round.");
                 this.scores.computer++;
             } else {
-                console.log(chalk.yellow("🤝 It's a tie!"));
+                console.log("It's a tie.");
             }
 
             callback();
@@ -91,7 +130,6 @@ export class DiceGame {
     playGame(callback) {
         this.selectDice(() => {
             let round = 1;
-
             const nextRound = () => {
                 if (round <= 3) {
                     this.playRound(round, () => {
@@ -99,15 +137,15 @@ export class DiceGame {
                         nextRound();
                     });
                 } else {
-                    console.log(chalk.bgBlue("\n🏆 **Game Over!**"));
-                    console.log(`👤 ${chalk.green("User: " + this.scores.user)} | 💻 ${chalk.red("Computer: " + this.scores.computer)}`);
+                    console.log("\nGame Over.");
+                    console.log(`User: ${this.scores.user} | Computer: ${this.scores.computer}`);
 
                     if (this.scores.user > this.scores.computer) {
-                        console.log(chalk.bgGreen("🎉 **You are the WINNER!**"));
+                        console.log("You are the winner!");
                     } else if (this.scores.user < this.scores.computer) {
-                        console.log(chalk.bgRed("💻 **Computer wins the game!**"));
+                        console.log("Computer wins the game.");
                     } else {
-                        console.log(chalk.bgYellow("🤝 **It's a tie!**"));
+                        console.log("It's a tie.");
                     }
 
                     this.rl.close();
